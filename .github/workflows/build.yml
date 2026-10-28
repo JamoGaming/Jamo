@@ -1,0 +1,48 @@
+name: Build Jamo
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev libwebkit2gtk-4.0-dev \
+            libglu1-mesa-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Configure
+        run: cmake -S . -B build -DJAMO_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Run tests
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ./build/Release/JamoTests.exe
+          else
+            ./build/JamoTests
+          fi
+        shell: bash
+
+      - name: Upload plugin artefacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Jamo-${{ runner.os }}-VST3
+          path: |
+            build/**/Jamo_artefacts/**/VST3
+            build/**/Jamo_artefacts/**/Standalone
+          if-no-files-found: warn
